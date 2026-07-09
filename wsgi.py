@@ -1,4 +1,5 @@
 import os
+import re  # <-- 1. Added regex module
 import requests
 from flask import Flask, request, jsonify
 from backend import chain_builder
@@ -39,7 +40,10 @@ def whatsapp_webhook():
             response = rag_chain.invoke(message_body)
             answer = response.content[0]['text'] if isinstance(response.content, list) else response.content
             
-            # 2. POST the answer back to Meta API to send the WhatsApp text
+            # 2. STRIP THE THINKING PROCESS TAGS HERE ⚡
+            clean_answer = re.sub(r'<think>.*?</think>', '', answer, flags=re.DOTALL).strip()
+            
+            # 3. POST the clean answer back to Meta API to send the WhatsApp text
             url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
             headers = {
                 "Authorization": f"Bearer {WHATSAPP_TOKEN}",
@@ -49,7 +53,7 @@ def whatsapp_webhook():
                 "messaging_product": "whatsapp",
                 "to": sender_phone,
                 "type": "text",
-                "text": {"body": answer}
+                "text": {"body": clean_answer}  # <-- Changed from 'answer' to 'clean_answer'
             }
             
             requests.post(url, json=payload, headers=headers)

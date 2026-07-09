@@ -30,7 +30,7 @@ def run_ingestion():
         embedding=embeddings,
         index_name="iit-pkd-index"  # Create an index named this in pinecone console
     )
-    print("🎉 Ingestion Complete! Cloud Vector DB is up to date.")
+    print("Ingestion Complete! Cloud Vector DB is up to date.")
 
 if __name__ == "__main__":
     run_ingestion()
