@@ -1,13 +1,22 @@
+import os
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
-import backend.vector_store as vector_store
+from langchain_pinecone import PineconeVectorStore
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-def build_rag_chain(retriever):
-    """Configures the template prompt, links the LLM, and returns the compiled RAG chain."""
+def build_rag_chain():
+    """Points to permanent Pinecone cloud indexes and builds the RAG chain."""
+    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+    
+    # Retrieve directly from cloud index instantly (Takes 0ms local CPU load)
+    vector_db = PineconeVectorStore(index_name="iit-pkd-index", embedding=embeddings)
+    retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+
     template = """
     Use the following pieces of retrieved context to answer the question. 
     If you don't know the answer, just say that you don't know. 
+    Keep responses clear and formatted appropriately for a mobile chat screen.
 
     Context: {context}
 
@@ -16,13 +25,13 @@ def build_rag_chain(retriever):
     Answer:
     """
     prompt = PromptTemplate.from_template(template)
-    
-    # Initialize Free Groq Engine
     llm = ChatGroq(model="qwen/qwen3.6-27b", temperature=0)
 
-    # Return the assembled declarative LangChain Expression Language (LCEL) chain
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+
     return (
-        {"context": retriever | vector_store.format_docs, "question": RunnablePassthrough()}
+        {"context": retriever | format_docs, "question": RunnablePassthrough()}
         | prompt
         | llm
     )
