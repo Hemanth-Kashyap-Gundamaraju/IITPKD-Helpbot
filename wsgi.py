@@ -1,11 +1,14 @@
 import os
 import re
 import requests
-import threading  # <-- 1. Import threading to handle background tasks
+from concurrent.futures import ThreadPoolExecutor  # <-- 1. Switched to ThreadPoolExecutor
 from flask import Flask, request, jsonify
 from backend import chain_builder
 
 app = Flask(__name__)
+
+# Initialize a global thread pool executor
+executor = ThreadPoolExecutor(max_workers=4)
 
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
@@ -14,9 +17,9 @@ VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN")
 rag_chain = chain_builder.build_rag_chain()
 
 def process_ai_and_reply(message_body, sender_phone):
-    """This runs in the background, allowing the webhook to reply 200 OK instantly."""
+    """This function is submitted to the executor pool to process in the background."""
     try:
-        # 1. Run inference through Groq + Pinecone (takes 1-3 seconds)
+        # 1. Run inference through Groq + Pinecone
         response = rag_chain.invoke(message_body)
         answer = response.content[0]['text'] if isinstance(response.content, list) else response.content
         
@@ -36,7 +39,9 @@ def process_ai_and_reply(message_body, sender_phone):
             "text": {"body": clean_answer}
         }
         
-        requests.post(url, json=payload, headers=headers)
+        res = requests.post(url, json=payload, headers=headers)
+        print(f"Meta API Response Code: {res.status_code}, Content: {res.text}")
+        
     except Exception as e:
         print(f"Error processing AI background response: {e}")
 
@@ -59,10 +64,10 @@ def whatsapp_webhook():
             message_body = message_value['messages'][0]['text']['body']
             sender_phone = message_value['messages'][0]['from']
             
-            # ⚡ SPIN OFF PROCESS AS A BACKGROUND THREAD & RETURN 200 OK IMMEDIATELY
-            threading.Thread(target=process_ai_and_reply, args=(message_body, sender_phone)).start()
+            # ⚡ Use the executor pool to guarantee execution space on Render
+            executor.submit(process_ai_and_reply, message_body, sender_phone)
             
-        return jsonify({"status": "success"}), 200  # <-- Returns in milliseconds!
+        return jsonify({"status": "success"}), 200
     except Exception as e:
         print(f"Error handling webhook payload: {e}")
         return jsonify({"status": "ignored"}), 200
