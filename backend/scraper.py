@@ -4,11 +4,27 @@ from langchain_community.document_loaders import WebBaseLoader
 import config
 
 def safe_html_extractor(html: str) -> str:
-    """Cleans up raw HTML files, stripping styling, headers, and navigation scripts."""
+    """Extracts valid body and text blocks from pages without destroying actual content chunks."""
     soup = BeautifulSoup(html, "html.parser")
-    for element in soup(["script", "style", "header", "footer", "nav"]):
+    
+    # 1. Remove ONLY non-text operational code
+    for element in soup(["script", "style"]):
         element.decompose()
-    return re.sub(r"\n+", "\n", soup.get_text()).strip()
+        
+    # 2. Extract text selectively from semantic structural tags only
+    # This prevents header/nav wrappers from deleting deep page text paragraphs
+    text_blocks = []
+    for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'td', 'li', 'span']):
+        text = tag.get_text().strip()
+        if text:
+            text_blocks.append(text)
+            
+    # Join everything with space or clean newlines
+    clean_text = "\n".join(text_blocks)
+    
+    # Clean up double spacing and formatting noise
+    return re.sub(r"\n+", "\n", clean_text).strip()
+    
 
 def scrape_target_pages():
     """Scrapes institutional pages and returns processed clean documents."""
