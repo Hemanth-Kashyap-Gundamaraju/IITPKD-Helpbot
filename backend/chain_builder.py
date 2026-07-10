@@ -5,13 +5,17 @@ from langchain_groq import ChatGroq
 from langchain_pinecone import PineconeVectorStore
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-def build_rag_chain():
-    """Points to permanent Pinecone cloud indexes and builds the RAG chain."""
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-    
-    # Retrieve directly from cloud index instantly (Takes 0ms local CPU load)
-    vector_db = PineconeVectorStore(index_name="iit-pkd-index", embedding=embeddings)
-    retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+def build_rag_chain(retriever=None):
+    """
+    Builds the RAG chain. Uses the passed retriever if available, 
+    otherwise falls back to connecting directly to the permanent Pinecone index.
+    """
+    # Fallback to Pinecone if no retriever is passed (e.g., in production/deployment)
+    if retriever is None:
+        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+        # Retrieve directly from cloud index instantly (Takes 0ms local CPU load)
+        vector_db = PineconeVectorStore(index_name="iit-pkd-index", embedding=embeddings)
+        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
 
     template = """
     Use the following pieces of retrieved context to answer the question. 

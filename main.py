@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import backend.scraper as scraper
 import backend.vector_store as vector_store
 import backend.chain_builder as chain_builder
-import interface.cli as cli
+import Interface.cli as cli
 
 load_dotenv()
 
@@ -18,7 +18,7 @@ def main():
     rag_chain = chain_builder.build_rag_chain(retriever)
     
     # 4. Fire up the chatbot session loop
-    ui.run_chat_loop(rag_chain)
+    cli.run_chat_loop(rag_chain)
 
 if __name__ == "__main__":
     main()
