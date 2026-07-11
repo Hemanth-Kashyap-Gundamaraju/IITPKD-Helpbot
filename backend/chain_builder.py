@@ -13,7 +13,7 @@ def build_rag_chain(retriever=None):
     otherwise selects the vector store based on APP_ENV.
     """
     if retriever is None:
-        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+        embeddings = GoogleGenerativeAIEmbeddings(model=config.EMBEDDING_MODEL_NAME)
         if config.APP_ENV == "production":
             vector_db = PineconeVectorStore(
                 index_name=config.PINECONE_INDEX_NAME,
@@ -24,7 +24,7 @@ def build_rag_chain(retriever=None):
                 persist_directory=config.CACHE_DIR,
                 embedding_function=embeddings,
             )
-        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+        retriever = vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
 
     template = """
     Use the following pieces of retrieved context to answer the question. 
@@ -38,7 +38,7 @@ def build_rag_chain(retriever=None):
     Answer:
     """
     prompt = PromptTemplate.from_template(template)
-    llm = ChatGroq(model="qwen/qwen3.6-27b", temperature=0)
+    llm = ChatGroq(model=config.LLM_MODEL_NAME, temperature=config.LLM_TEMPERATURE)
 
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)

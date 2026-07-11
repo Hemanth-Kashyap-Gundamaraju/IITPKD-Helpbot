@@ -39,7 +39,7 @@ def initialize_vector_db(documents):
         )
         return None
 
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model=config.EMBEDDING_MODEL_NAME)
 
     if config.APP_ENV == "production":
         vector_db = PineconeVectorStore.from_documents(
@@ -47,11 +47,11 @@ def initialize_vector_db(documents):
             embedding=embeddings,
             index_name=config.PINECONE_INDEX_NAME,
         )
-        return vector_db.as_retriever(search_kwargs={"k": 3})
+        return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
 
     # Resilient DB assignment tracking to overcome heavy server traffic
     vector_db = None
-    for attempt in range(4):
+    for attempt in range(config.VECTOR_DB_RETRY_ATTEMPTS):
         try:
             vector_db = Chroma.from_documents(
                 documents=chunks,
@@ -60,8 +60,11 @@ def initialize_vector_db(documents):
             )
             break
         except Exception as e:
-            if "503" in str(e) and attempt < 3:
-                sleep_time = 4 + random.uniform(1, 3)
+            if "503" in str(e) and attempt < config.VECTOR_DB_RETRY_ATTEMPTS - 1:
+                sleep_time = config.VECTOR_DB_RETRY_SLEEP_BASE + random.uniform(
+                    config.VECTOR_DB_RETRY_SLEEP_JITTER_MIN,
+                    config.VECTOR_DB_RETRY_SLEEP_JITTER_MAX,
+                )
                 print(
                     f"   [Server Busy] Embedding engine congested. Retrying database upload in {sleep_time:.1f}s..."
                 )
@@ -70,7 +73,7 @@ def initialize_vector_db(documents):
                 print(f"\n[Error during vectorization]: {e}")
                 exit()
 
-    return vector_db.as_retriever(search_kwargs={"k": 3})
+    return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
 
 
 def format_docs(docs):
