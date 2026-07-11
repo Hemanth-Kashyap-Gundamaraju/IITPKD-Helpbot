@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import backend.scraper as scraper
 import backend.vector_store as vector_store
 import backend.chain_builder as chain_builder
+import backend.response_utils as response_utils
 import cli as cli
 
 load_dotenv()

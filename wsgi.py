@@ -1,8 +1,10 @@
 import re
+from urllib import response
 import requests
 from flask import Flask, request, jsonify
 from backend import chain_builder
 import config
+from backend.response_utils import clean_llm_response
 
 app = Flask(__name__)
 
@@ -37,16 +39,8 @@ def whatsapp_webhook():
 
             # 1. Force execution inside the main thread loop (Blocks till finished)
             response = rag_chain.invoke(message_body)
-            answer = (
-                response.content[0]["text"]
-                if isinstance(response.content, list)
-                else response.content
-            )
 
-            # 2. Strip out the thinking tags
-            clean_answer = re.sub(
-                r"<think>.*?</think>", "", answer, flags=re.DOTALL
-            ).strip()
+            clean_answer = clean_llm_response(response)
 
             # 3. POST the clean text back to the Meta API
             url = f"{config.WHATSAPP_GRAPH_BASE_URL}/{config.WHATSAPP_GRAPH_API_VERSION}/{PHONE_NUMBER_ID}/messages"
