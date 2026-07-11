@@ -50,8 +50,8 @@ if IS_PRODUCTION and not PINECONE_API_KEY:
     raise RuntimeError("PINECONE_API_KEY must be set when APP_ENV=production")
 
 # Text Processing Parameters
-CHUNK_SIZE = 1500
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 150
 
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
