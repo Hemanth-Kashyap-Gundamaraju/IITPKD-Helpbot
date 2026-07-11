@@ -1,20 +1,29 @@
-import os
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
+from langchain_community.vectorstores import Chroma
 from langchain_pinecone import PineconeVectorStore
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import config
+
 
 def build_rag_chain(retriever=None):
     """
-    Builds the RAG chain. Uses the passed retriever if available, 
-    otherwise falls back to connecting directly to the permanent Pinecone index.
+    Builds the RAG chain. Uses the passed retriever if available,
+    otherwise selects the vector store based on APP_ENV.
     """
-    # Fallback to Pinecone if no retriever is passed (e.g., in production/deployment)
     if retriever is None:
         embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-        # Retrieve directly from cloud index instantly (Takes 0ms local CPU load)
-        vector_db = PineconeVectorStore(index_name="iit-pkd-index", embedding=embeddings)
+        if config.APP_ENV == "production":
+            vector_db = PineconeVectorStore(
+                index_name=config.PINECONE_INDEX_NAME,
+                embedding=embeddings,
+            )
+        else:
+            vector_db = Chroma(
+                persist_directory=config.CACHE_DIR,
+                embedding_function=embeddings,
+            )
         retriever = vector_db.as_retriever(search_kwargs={"k": 3})
 
     template = """
