@@ -1,3 +1,4 @@
+import re
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -7,14 +8,22 @@ import config
 # ---------------------------------------------------------------------------
 # GLOBAL SETTINGS
 # ---------------------------------------------------------------------------
-# A line longer than this is treated as "real content" (a sentence), not a
-# navigation menu item. Menu items like "About Us" or "Contact" are short.
-MAX_NAV_LINE_LENGTH = 60
+# A line longer than this is treated as "real content" (a sentence/title),
+# not a navigation menu item. Menu items are usually short ("About Us"),
+# while real titles (notifications, events) tend to run a bit longer.
+MAX_NAV_LINE_LENGTH = 40
 
-# If we see this many short lines in a row, we treat that whole block as a
-# navigation/footer menu and remove it, since real writing rarely has this
-# many short lines back-to-back.
-MIN_NAV_CLUSTER_SIZE = 8
+# If we see this many short, nav-looking lines in a row, we treat that whole
+# block as a navigation/footer menu and remove it. Raised higher than before
+# so smaller real content lists (e.g. 5-10 notifications) survive, and only
+# genuinely huge menus (50+ lines) get cut.
+MIN_NAV_CLUSTER_SIZE = 20
+
+# Matches any digit. Real content (event years, notification titles, phone
+# numbers, PIN codes) very often contains a number. Plain nav menu items
+# ("Faculty", "Contact", "Research") almost never do. So a short line WITH
+# a digit in it is treated as real content, not a menu item.
+DIGIT_PATTERN = re.compile(r"\d")
 
 
 def discover_internal_links(base_url=None, max_pages=None):
@@ -90,16 +99,28 @@ def _remove_duplicate_lines(text):
 
 
 def _is_probably_nav_line(line):
-    """A short line is probably a navigation/menu item, not a real sentence."""
+    """
+    A line is probably a navigation/menu item if it's short AND has no
+    digits in it. Real content (dates, years, phone numbers, PIN codes,
+    notification titles) tends to break at least one of these rules.
+    """
     stripped_line = line.strip()
-    return 0 < len(stripped_line) <= MAX_NAV_LINE_LENGTH
+
+    if not stripped_line or len(stripped_line) > MAX_NAV_LINE_LENGTH:
+        return False
+
+    if DIGIT_PATTERN.search(stripped_line):
+        return False
+
+    return True
 
 
 def _remove_navigation_clusters(text):
     """
     Deletes big blocks of short, menu-like lines (e.g. 'About Us', 'Faculty',
     'Contact' one after another). Real page content (paragraphs, addresses,
-    descriptions) is made of longer sentences, so this leaves that untouched.
+    notification titles, dates) is either longer or contains numbers, so
+    this heuristic leaves that untouched.
     """
     lines = text.split("\n")
     kept_lines = []
@@ -108,7 +129,7 @@ def _remove_navigation_clusters(text):
     def flush_cluster():
         """Decides whether the lines collected so far are a nav menu or real content."""
         if len(current_cluster) >= MIN_NAV_CLUSTER_SIZE:
-            # Too many short lines in a row -> treat as navigation clutter, drop it.
+            # Too many short, digit-free lines in a row -> navigation clutter, drop it.
             return
         kept_lines.extend(current_cluster)
 
@@ -128,7 +149,7 @@ def clean_scraped_documents(documents):
     """
     Cleans up every scraped document by stripping out duplicate lines and
     navigation menu clutter, so real content (like an address or a
-    description) isn't drowned out when the text gets chunked later.
+    notification) isn't drowned out when the text gets chunked later.
     """
     for doc in documents:
         cleaned_text = _remove_duplicate_lines(doc.page_content)

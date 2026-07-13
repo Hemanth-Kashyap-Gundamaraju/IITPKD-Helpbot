@@ -4,6 +4,8 @@ from langchain_groq import ChatGroq
 from langchain_community.vectorstores import Chroma
 from langchain_pinecone import PineconeVectorStore
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from backend.embeddings_utils import get_embeddings
+
 import config
 
 
@@ -13,7 +15,7 @@ def build_rag_chain(retriever=None):
     otherwise selects the vector store based on APP_ENV.
     """
     if retriever is None:
-        embeddings = GoogleGenerativeAIEmbeddings(model=config.EMBEDDING_MODEL_NAME)
+        embeddings = get_embeddings()
         if config.APP_ENV == "production":
             vector_db = PineconeVectorStore(
                 index_name=config.PINECONE_INDEX_NAME,

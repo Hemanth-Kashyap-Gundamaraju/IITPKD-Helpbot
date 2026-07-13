@@ -2,19 +2,21 @@
 # CRITICAL: This environment patch MUST run before any other imports!
 # =====================================================================
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import config
 
 os.environ["USER_AGENT"] = config.SCRAPER_HEADERS["User-Agent"]
 # =====================================================================
 
 import time  # <--- Added for rate-limit throttling
-from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from backend import scraper
 
-load_dotenv()
 
 
 def run_ingestion():

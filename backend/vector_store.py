@@ -7,6 +7,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 import config
+from backend.embeddings_utils import get_embeddings
 
 # ---------------------------------------------------------------------------
 # GLOBAL SETTINGS (pulled from config so they're easy to tune in one place)
@@ -135,8 +136,7 @@ def initialize_vector_db(documents):
         )
         return None
 
-    embeddings = GoogleGenerativeAIEmbeddings(model=config.EMBEDDING_MODEL_NAME)
-
+    embeddings = get_embeddings()
     if config.APP_ENV == "production":
         vector_db = PineconeVectorStore.from_documents(
             documents=chunks,

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import backend.scraper as scraper
 import backend.vector_store as vector_store
 import backend.chain_builder as chain_builder
-import cli as cli
+import interface.cli as cli
 import config
 
 load_dotenv()
