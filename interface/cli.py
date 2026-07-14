@@ -1,50 +1,103 @@
 import sys
 import time
 import threading
-from urllib import response
 from backend.response_utils import clean_llm_response
 
 
-def loading_counter(stop_event):
-    """Prints a live ticking timer on the command line during network calls."""
-    start_time = time.time()
-    while not stop_event.is_set():
-        elapsed = int(time.time() - start_time)
-        sys.stdout.write(f"\rThinking... [{elapsed}s]")
+class LoadingIndicator:
+    """
+    Description: Shows a live ticking "Thinking... [Ns]" counter on the
+        terminal while a slow network call runs in the background. Groups
+        together the thread and its stop-signal (the same two pieces of
+        data that used to be passed around loose between functions) as
+        attributes on one object.
+    Inputs (constructor): none.
+    Utilities: used by execute_query_with_loading().
+    """
+
+    def __init__(self):
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._tick)
+
+    def _tick(self):
+        """
+        Description: The background loop that actually prints the ticking
+            counter, once per second, until told to stop.
+        Inputs: none. Reads self._stop_event.
+        Outputs: no return value. Writes to stdout as a side effect.
+        Dependencies: none.
+        Utilities: run as the target of self._thread (started by start()).
+        """
+        start_time = time.time()
+        while not self._stop_event.is_set():
+            elapsed = int(time.time() - start_time)
+            sys.stdout.write(f"\rThinking... [{elapsed}s]")
+            sys.stdout.flush()
+            time.sleep(1)
+        sys.stdout.write("\r" + " " * 30 + "\r")
         sys.stdout.flush()
-        time.sleep(1)
-    # Clear the loading line once finished
-    sys.stdout.write("\r" + " " * 30 + "\r")
-    sys.stdout.flush()
+
+    def start(self):
+        """
+        Description: Starts the background counter thread.
+        Inputs: none.
+        Outputs: no return value. Starts self._thread.
+        Dependencies: none.
+        Utilities: called by execute_query_with_loading().
+        """
+        self._thread.start()
+
+    def stop(self):
+        """
+        Description: Signals the background thread to stop and waits for
+            it to finish, so the ticking line is fully cleared before
+            anything else prints.
+        Inputs: none. Sets self._stop_event.
+        Outputs: no return value.
+        Dependencies: none.
+        Utilities: called by execute_query_with_loading().
+        """
+        self._stop_event.set()
+        if self._thread.is_alive():
+            self._thread.join()
 
 
 def execute_query_with_loading(rag_chain, user_question):
-    """Manages the UI loading thread context while executing the model invocation."""
-    stop_loading = threading.Event()
-    counter_thread = threading.Thread(target=loading_counter, args=(stop_loading,))
+    """
+    Description: Runs one question through the RAG chain while showing a
+        loading indicator, then prints the cleaned answer. Handles errors
+        so one bad query doesn't crash the whole chat loop.
+    Inputs: rag_chain (the LangChain runnable), user_question (string).
+        No globals read.
+    Outputs: no return value. Prints the answer (or an error) to stdout.
+    Dependencies: calls LoadingIndicator, clean_llm_response(); calls
+        rag_chain.invoke().
+    Utilities: called by run_chat_loop().
+    """
+    indicator = LoadingIndicator()
 
     try:
-        counter_thread.start()
-
-        # Invoke network request to Groq pipeline
+        indicator.start()
         response = rag_chain.invoke(user_question)
+        indicator.stop()
 
-        stop_loading.set()
-        counter_thread.join()
-
-        # Clean structural output strings out of Langchain components
         clean_answer = clean_llm_response(response)
         print(f"Answer: {clean_answer}")
 
     except Exception as e:
-        stop_loading.set()
-        if counter_thread.is_alive():
-            counter_thread.join()
+        indicator.stop()
         print(f"\nAn execution error occurred: {e}")
 
 
 def run_chat_loop(rag_chain):
-    """Runs the terminal shell loop capturing user text input instructions."""
+    """
+    Description: Runs the terminal shell loop that reads user questions and
+        answers them, until the user types 'exit' or 'quit'.
+    Inputs: rag_chain (the LangChain runnable). No globals read.
+    Outputs: no return value. Runs until the user exits.
+    Dependencies: calls execute_query_with_loading().
+    Utilities: called by main.py.
+    """
     print("\n--- Targeted Website Chatbot Initialized (Modular Architecture) ---")
     print("Type 'exit' or 'quit' to stop.")
 

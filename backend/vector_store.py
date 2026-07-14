@@ -2,18 +2,19 @@ import os
 import shutil
 import random
 import time
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 import config
 from backend.embeddings_utils import get_embeddings
+from backend.chunking_utils import chunk_documents
+from backend.batching_utils import split_into_batches
 
 # ---------------------------------------------------------------------------
-# GLOBAL SETTINGS (pulled from config so they're easy to tune in one place)
+# GLOBAL SETTINGS
 # ---------------------------------------------------------------------------
-# How many chunks we send to Google in one embedding request.
-# Sending too many at once is what triggers the 429 "quota exceeded" error.
+# How many chunks we send to Google in one embedding request when building
+# the LOCAL Chroma database. Sending too many at once is what triggers the
+# 429 "quota exceeded" error.
 LOCAL_EMBED_BATCH_SIZE = config.INGESTION_BATCH_SIZE
 
 # How long we wait between two normal, successful batches (to avoid
@@ -26,8 +27,11 @@ LOCAL_EMBED_RATE_LIMIT_COOLDOWN = config.INGESTION_RATE_LIMIT_COOLDOWN
 
 def _is_quota_error(error):
     """
-    Checks if an error is a '429 RESOURCE_EXHAUSTED' quota error.
-    This happens when we send too many embedding requests too fast.
+    Description: Checks if an error is a '429 RESOURCE_EXHAUSTED' quota error.
+    Inputs: error (the exception object). No globals read.
+    Outputs: returns True/False. No globals changed.
+    Dependencies: none.
+    Utilities: called by LocalChromaIngestor.add_batch_with_retries().
     """
     error_text = str(error)
     return "429" in error_text or "RESOURCE_EXHAUSTED" in error_text
@@ -35,14 +39,28 @@ def _is_quota_error(error):
 
 def _is_server_busy_error(error):
     """
-    Checks if an error is a '503' error, meaning Google's servers are
-    temporarily overloaded (different problem than running out of quota).
+    Description: Checks if an error is a '503' error, meaning Google's
+        servers are temporarily overloaded (different problem than
+        running out of quota).
+    Inputs: error (the exception object). No globals read.
+    Outputs: returns True/False. No globals changed.
+    Dependencies: none.
+    Utilities: called by LocalChromaIngestor.add_batch_with_retries().
     """
     return "503" in str(error)
 
 
 def _get_backoff_sleep_seconds():
-    """Calculates how long to wait before retrying after a 503 (server busy) error."""
+    """
+    Description: Calculates how long to wait before retrying after a 503
+        (server busy) error, with a bit of random jitter so retries from
+        multiple batches don't all land at the same instant.
+    Inputs: none. Reads globals config.VECTOR_DB_RETRY_SLEEP_BASE,
+        config.VECTOR_DB_RETRY_SLEEP_JITTER_MIN, config.VECTOR_DB_RETRY_SLEEP_JITTER_MAX.
+    Outputs: returns a float (seconds to sleep). No globals changed.
+    Dependencies: none.
+    Utilities: called by LocalChromaIngestor.add_batch_with_retries().
+    """
     return config.VECTOR_DB_RETRY_SLEEP_BASE + random.uniform(
         config.VECTOR_DB_RETRY_SLEEP_JITTER_MIN,
         config.VECTOR_DB_RETRY_SLEEP_JITTER_MAX,
@@ -50,7 +68,15 @@ def _get_backoff_sleep_seconds():
 
 
 def _clear_old_local_cache():
-    """Deletes the old local Chroma folder so we don't mix old and new data."""
+    """
+    Description: Deletes the old local Chroma folder so we don't mix old
+        and new data when re-ingesting from scratch.
+    Inputs: none. Reads globals config.APP_ENV, config.CACHE_DIR.
+    Outputs: no return value. Deletes the folder at config.CACHE_DIR on disk
+        (not a Python global, but a real side effect worth flagging).
+    Dependencies: none.
+    Utilities: called by initialize_vector_db().
+    """
     if (
         config.APP_ENV == "local"
         and config.CACHE_DIR
@@ -60,112 +86,158 @@ def _clear_old_local_cache():
         shutil.rmtree(config.CACHE_DIR)
 
 
-def _split_into_batches(items, batch_size):
-    """Splits a list into smaller lists (batches) of the given size."""
-    return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
-
-
-def _add_batch_to_local_db(vector_db, batch, embeddings):
+class LocalChromaIngestor:
     """
-    Adds one batch of chunks to the local Chroma database.
-    If the database doesn't exist yet, this creates it.
-    If it already exists, this just adds more documents to it.
+    Description: Handles embedding and writing chunk batches into the local
+        Chroma database, with retries on rate-limit/server-busy errors.
+        Groups together the embeddings model and the growing Chroma
+        connection - the two things every step needs - as attributes on
+        one object instead of passing them separately into every function.
+    Inputs (constructor): embeddings (the embeddings model to use).
+    Utilities: used by initialize_vector_db().
     """
-    if vector_db is None:
-        return Chroma.from_documents(
-            documents=batch,
-            embedding=embeddings,
-            persist_directory=config.CACHE_DIR,
-        )
-    vector_db.add_documents(batch)
-    return vector_db
+
+    def __init__(self, embeddings):
+        self.embeddings = embeddings
+        self.vector_db = None  # set once the first batch creates the local DB
+
+    def add_batch(self, batch):
+        """
+        Description: Adds one batch of chunks to the local Chroma database.
+            Creates the database on the first call, adds to it on every
+            call after that. This is the only method that actually writes
+            to disk/calls the embeddings API, so it's the only piece that
+            needs a real (or mocked) connection to test.
+        Inputs: batch (list of Document chunks). Reads self.embeddings,
+            self.vector_db. Reads global config.CACHE_DIR.
+        Outputs: no return value. Sets self.vector_db (on the first call).
+        Dependencies: uses langchain_community.vectorstores.Chroma.
+        Utilities: called by add_batch_with_retries().
+        """
+        if self.vector_db is None:
+            self.vector_db = Chroma.from_documents(
+                documents=batch,
+                embedding=self.embeddings,
+                persist_directory=config.CACHE_DIR,
+            )
+        else:
+            self.vector_db.add_documents(batch)
+
+    def add_batch_with_retries(self, batch, batch_number, total_batches):
+        """
+        Description: Tries to embed and store one batch of chunks, retrying
+            automatically on a 429 (quota) or 503 (server busy) error.
+            Gives up and exits the whole program only after too many
+            failed attempts.
+        Inputs: batch, batch_number, total_batches. Reads global
+            config.VECTOR_DB_RETRY_ATTEMPTS, LOCAL_EMBED_RATE_LIMIT_COOLDOWN.
+        Outputs: no return value (self.vector_db is updated via add_batch).
+        Dependencies: calls add_batch(), _is_quota_error(),
+            _is_server_busy_error(), _get_backoff_sleep_seconds().
+        Utilities: called by ingest_all_chunks().
+        """
+        for attempt in range(config.VECTOR_DB_RETRY_ATTEMPTS):
+            try:
+                self.add_batch(batch)
+                return
+            except Exception as e:
+                is_last_attempt = attempt == config.VECTOR_DB_RETRY_ATTEMPTS - 1
+
+                if _is_quota_error(e) and not is_last_attempt:
+                    print(
+                        f"   [Rate Limit] Batch {batch_number}/{total_batches} hit the free-tier "
+                        f"quota. Cooling down for {LOCAL_EMBED_RATE_LIMIT_COOLDOWN}s..."
+                    )
+                    time.sleep(LOCAL_EMBED_RATE_LIMIT_COOLDOWN)
+
+                elif _is_server_busy_error(e) and not is_last_attempt:
+                    sleep_time = _get_backoff_sleep_seconds()
+                    print(
+                        f"   [Server Busy] Batch {batch_number}/{total_batches} congested. "
+                        f"Retrying in {sleep_time:.1f}s..."
+                    )
+                    time.sleep(sleep_time)
+
+                else:
+                    print(f"\n[Error during vectorization]: {e}")
+                    exit()
+
+    def ingest_all_chunks(self, chunks):
+        """
+        Description: Embeds and stores every chunk into the local Chroma
+            database, batch by batch, pausing between batches to stay
+            under the rate limit. Orchestrates the other methods on this
+            class rather than doing any single thing itself.
+        Inputs: chunks (full list of chunked Documents). Reads global
+            LOCAL_EMBED_BATCH_SIZE, LOCAL_EMBED_BATCH_PAUSE.
+        Outputs: returns self.vector_db once every batch is stored.
+        Dependencies: calls backend.batching_utils.split_into_batches(),
+            add_batch_with_retries().
+        Utilities: called by initialize_vector_db().
+        """
+        batches = split_into_batches(chunks, LOCAL_EMBED_BATCH_SIZE)
+        total_batches = len(batches)
+
+        for batch_number, batch in enumerate(batches, start=1):
+            print(f"Embedding batch {batch_number}/{total_batches} ({len(batch)} chunks)...")
+            self.add_batch_with_retries(batch, batch_number, total_batches)
+
+            if batch_number < total_batches:
+                time.sleep(LOCAL_EMBED_BATCH_PAUSE)
+
+        return self.vector_db
 
 
-def _embed_batch_with_retries(vector_db, batch, embeddings, batch_number, total_batches):
+def _build_production_vector_db(chunks, embeddings):
     """
-    Tries to embed and store one batch of chunks.
-    Retries automatically if we hit a 429 (quota) or 503 (server busy) error.
-    Gives up and exits only after too many failed attempts.
+    Description: Builds (or connects to) the production Pinecone index and
+        uploads every chunk in one call - Pinecone's own client handles
+        batching server-side, so no manual batch loop is needed here.
+    Inputs: chunks (full list of chunked Documents), embeddings (the
+        embeddings model to use). Reads global config.PINECONE_INDEX_NAME.
+    Outputs: returns the PineconeVectorStore object. No globals changed.
+    Dependencies: uses langchain_pinecone.PineconeVectorStore.
+    Utilities: called by initialize_vector_db().
     """
-    for attempt in range(config.VECTOR_DB_RETRY_ATTEMPTS):
-        try:
-            return _add_batch_to_local_db(vector_db, batch, embeddings)
-        except Exception as e:
-            is_last_attempt = attempt == config.VECTOR_DB_RETRY_ATTEMPTS - 1
-
-            if _is_quota_error(e) and not is_last_attempt:
-                print(
-                    f"   [Rate Limit] Batch {batch_number}/{total_batches} hit the free-tier "
-                    f"quota. Cooling down for {LOCAL_EMBED_RATE_LIMIT_COOLDOWN}s..."
-                )
-                time.sleep(LOCAL_EMBED_RATE_LIMIT_COOLDOWN)
-
-            elif _is_server_busy_error(e) and not is_last_attempt:
-                sleep_time = _get_backoff_sleep_seconds()
-                print(
-                    f"   [Server Busy] Batch {batch_number}/{total_batches} congested. "
-                    f"Retrying in {sleep_time:.1f}s..."
-                )
-                time.sleep(sleep_time)
-
-            else:
-                print(f"\n[Error during vectorization]: {e}")
-                exit()
+    return PineconeVectorStore.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        index_name=config.PINECONE_INDEX_NAME,
+    )
 
 
 def initialize_vector_db(documents):
-    """Chunks scraped text documents and builds the vector database."""
+    """
+    Description: Chunks scraped text documents and builds the vector
+        database - production Pinecone or local Chroma, depending on
+        config.APP_ENV.
+    Inputs: documents (list of raw Document objects). Reads global
+        config.APP_ENV, config.RETRIEVER_TOP_K.
+    Outputs: returns a retriever object, or None if ingestion was skipped.
+    Dependencies: calls _clear_old_local_cache(),
+        backend.chunking_utils.chunk_documents(), get_embeddings(),
+        _build_production_vector_db(), LocalChromaIngestor.
+    Utilities: called by main.py (via backend.vector_store.initialize_vector_db).
+    """
     if not documents:
-        print(
-            "❌ Error: No scraped documents were returned, so vector ingestion was skipped."
-        )
+        print("Error: No scraped documents were returned, so vector ingestion was skipped.")
         return None
 
     _clear_old_local_cache()
 
-    # Split structural elements into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=config.CHUNK_SIZE, chunk_overlap=config.CHUNK_OVERLAP
-    )
-    chunks = text_splitter.split_documents(documents)
+    chunks = chunk_documents(documents)
     print(f"Generated {len(chunks)} text chunks. Mapping vectors via Google API...")
 
     if not chunks:
-        print(
-            "❌ Error: Generated 0 text chunks. Ingestion halted to prevent database wipe."
-        )
+        print("Error: Generated 0 text chunks. Ingestion halted to prevent database wipe.")
         return None
 
     embeddings = get_embeddings()
+
     if config.APP_ENV == "production":
-        vector_db = PineconeVectorStore.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            index_name=config.PINECONE_INDEX_NAME,
-        )
-        return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
-
-    # --- Local Chroma path: send chunks in small batches instead of all at once ---
-    # This is the actual fix: sending everything in one shot is what triggers
-    # the 429 "quota exceeded" error you saw.
-    batches = _split_into_batches(chunks, LOCAL_EMBED_BATCH_SIZE)
-    total_batches = len(batches)
-    vector_db = None
-
-    for batch_number, batch in enumerate(batches, start=1):
-        print(f"Embedding batch {batch_number}/{total_batches} ({len(batch)} chunks)...")
-        vector_db = _embed_batch_with_retries(
-            vector_db, batch, embeddings, batch_number, total_batches
-        )
-
-        # Small pause between batches so we don't bump into the per-minute
-        # limit again on the very next batch.
-        if batch_number < total_batches:
-            time.sleep(LOCAL_EMBED_BATCH_PAUSE)
+        vector_db = _build_production_vector_db(chunks, embeddings)
+    else:
+        ingestor = LocalChromaIngestor(embeddings)
+        vector_db = ingestor.ingest_all_chunks(chunks)
 
     return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
-
-
-def format_docs(docs):
-    """Formats context documents into an ordered block string format."""
-    return "\n\n".join(doc.page_content for doc in docs)
