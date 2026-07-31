@@ -1,7 +1,7 @@
 import requests
 from flask import Flask, request, jsonify
 from backend import chain_builder
-from backend.response_utils import clean_llm_response
+from backend.utils.response_utils import clean_llm_response
 import config
 
 app = Flask(__name__)

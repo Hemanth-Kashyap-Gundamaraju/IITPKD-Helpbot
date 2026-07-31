@@ -1,7 +1,7 @@
 import sys
 import time
 import threading
-from backend.response_utils import clean_llm_response
+from backend.utils.response_utils import clean_llm_response
 
 
 class LoadingIndicator:

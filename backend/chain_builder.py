@@ -3,7 +3,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
 from langchain_community.vectorstores import Chroma
 from langchain_pinecone import PineconeVectorStore
-from backend.embeddings_utils import get_embeddings
+from backend.utils.embeddings_utils import get_embeddings
 
 import config
 

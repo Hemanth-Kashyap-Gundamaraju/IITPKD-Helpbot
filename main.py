@@ -18,22 +18,6 @@ load_dotenv()
 FORCE_REFRESH_FLAG = "--refresh"
 
 
-def _local_database_already_exists():
-    """
-    Description: Checks if a local Chroma database already exists on disk.
-        If it does, we don't need to re-scrape and re-embed everything
-        again - we can just load it and start chatting, saving our daily
-        embedding quota.
-    Inputs: none. Reads global config.CACHE_DIR.
-    Outputs: returns True/False. No globals changed.
-    Dependencies: none.
-    Utilities: called by main().
-    """
-    return (
-        config.CACHE_DIR is not None
-        and os.path.exists(config.CACHE_DIR)
-        and len(os.listdir(config.CACHE_DIR)) > 0
-    )
 
 
 def _user_requested_refresh():
