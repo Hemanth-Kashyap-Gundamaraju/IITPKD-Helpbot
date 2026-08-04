@@ -3,8 +3,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
 from langchain_pinecone import PineconeVectorStore
 from backend.utils.embeddings_utils import get_embeddings
-from backend.vector_store import _get_or_create_index
-
+from backend.utils.pinecone_index_utils import get_or_create_index
 import config
 
 RAG_PROMPT_TEMPLATE = """
@@ -47,7 +46,7 @@ def _build_retriever_from_existing_store():
     Utilities: called by build_rag_chain().
     """
     embeddings = get_embeddings()
-    index_name = _get_or_create_index(embeddings)
+    index_name = get_or_create_index(embeddings)
     vector_db = PineconeVectorStore(
         index_name=index_name,
         embedding=embeddings,

@@ -3,7 +3,7 @@ from langchain_pinecone import PineconeVectorStore
 import config
 from backend.utils.embeddings_utils import get_embeddings
 from backend.utils.chunking_utils import chunk_documents
-
+from backend.utils.pinecone_index_utils import get_or_create_index
 
 def _get_or_create_index(embeddings):
     """Create or select a Pinecone index compatible with the active embedding model."""
@@ -61,7 +61,7 @@ def _build_vector_db(chunks, embeddings):
     Dependencies: uses langchain_pinecone.PineconeVectorStore.
     Utilities: called by initialize_vector_db().
     """
-    index_name = _get_or_create_index(embeddings)
+    index_name = get_or_create_index(embeddings)
     return PineconeVectorStore.from_documents(
         documents=chunks,
         embedding=embeddings,
