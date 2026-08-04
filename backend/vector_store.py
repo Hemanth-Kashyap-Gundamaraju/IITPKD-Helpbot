@@ -1,7 +1,53 @@
+from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 import config
 from backend.utils.embeddings_utils import get_embeddings
 from backend.utils.chunking_utils import chunk_documents
+
+
+def _get_or_create_index(embeddings):
+    """Create or select a Pinecone index compatible with the active embedding model."""
+    client = Pinecone(api_key=config.PINECONE_API_KEY)
+    sample_vector = embeddings.embed_query("warmup")
+    dimension = len(sample_vector)
+    target_name = config.PINECONE_INDEX_NAME
+    dimension_suffix = f"-{dimension}"
+    preferred_name = f"{target_name}{dimension_suffix}"
+
+    existing_indexes = {item["name"] for item in client.list_indexes()}
+
+    if preferred_name in existing_indexes:
+        index_info = client.describe_index(preferred_name)
+        if index_info.get("dimension") == dimension:
+            return preferred_name
+
+    if target_name in existing_indexes:
+        index_info = client.describe_index(target_name)
+        if index_info.get("dimension") == dimension:
+            return target_name
+
+    if preferred_name in existing_indexes:
+        return preferred_name
+
+    client.create_index(
+        name=preferred_name,
+        dimension=dimension,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+    )
+
+    import time
+
+    for _ in range(30):
+        try:
+            index_info = client.describe_index(preferred_name)
+            if index_info.get("status", {}).get("state") == "Ready":
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+
+    return preferred_name
 
 
 def _build_vector_db(chunks, embeddings):
@@ -15,10 +61,11 @@ def _build_vector_db(chunks, embeddings):
     Dependencies: uses langchain_pinecone.PineconeVectorStore.
     Utilities: called by initialize_vector_db().
     """
+    index_name = _get_or_create_index(embeddings)
     return PineconeVectorStore.from_documents(
         documents=chunks,
         embedding=embeddings,
-        index_name=config.PINECONE_INDEX_NAME,
+        index_name=index_name,
     )
 
 
@@ -34,14 +81,18 @@ def initialize_vector_db(documents):
     Utilities: called by main.py (via backend.vector_store.initialize_vector_db).
     """
     if not documents:
-        print("Error: No scraped documents were returned, so vector ingestion was skipped.")
+        print(
+            "Error: No scraped documents were returned, so vector ingestion was skipped."
+        )
         return None
 
     chunks = chunk_documents(documents)
     print(f"Generated {len(chunks)} text chunks. Mapping vectors via Google API...")
 
     if not chunks:
-        print("Error: Generated 0 text chunks. Ingestion halted to prevent database wipe.")
+        print(
+            "Error: Generated 0 text chunks. Ingestion halted to prevent database wipe."
+        )
         return None
 
     embeddings = get_embeddings()

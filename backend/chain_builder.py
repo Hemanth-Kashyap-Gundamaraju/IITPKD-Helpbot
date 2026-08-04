@@ -1,9 +1,9 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
-from langchain_community.vectorstores import Chroma
 from langchain_pinecone import PineconeVectorStore
 from backend.utils.embeddings_utils import get_embeddings
+from backend.vector_store import _get_or_create_index
 
 import config
 
@@ -37,27 +37,21 @@ def format_docs(docs):
 
 def _build_retriever_from_existing_store():
     """
-    Description: Connects to whichever vector store is configured
-        (production Pinecone or local Chroma) and wraps it as a retriever,
-        for the case where main.py didn't already build one.
-    Inputs: none. Reads global config.APP_ENV, config.PINECONE_INDEX_NAME,
-        config.CACHE_DIR, config.RETRIEVER_TOP_K.
+    Description: Connects to the Pinecone vector store and wraps it as a
+        retriever for the RAG chain.
+    Inputs: none. Reads global config.PINECONE_INDEX_NAME and
+        config.RETRIEVER_TOP_K.
     Outputs: returns a retriever object. No globals changed.
     Dependencies: calls get_embeddings(); uses
-        langchain_pinecone.PineconeVectorStore, langchain_community.vectorstores.Chroma.
+        langchain_pinecone.PineconeVectorStore.
     Utilities: called by build_rag_chain().
     """
     embeddings = get_embeddings()
-    if config.APP_ENV == "production":
-        vector_db = PineconeVectorStore(
-            index_name=config.PINECONE_INDEX_NAME,
-            embedding=embeddings,
-        )
-    else:
-        vector_db = Chroma(
-            persist_directory=config.CACHE_DIR,
-            embedding_function=embeddings,
-        )
+    index_name = _get_or_create_index(embeddings)
+    vector_db = PineconeVectorStore(
+        index_name=index_name,
+        embedding=embeddings,
+    )
     return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
 
 

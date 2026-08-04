@@ -1,4 +1,3 @@
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 import config
 
@@ -35,16 +34,12 @@ class EmbeddingsProvider:
         if self._cached_embeddings is not None:
             return self._cached_embeddings
 
-        if config.EMBEDDING_PROVIDER == "local":
-            print(f"Using LOCAL embeddings ({config.LOCAL_EMBEDDING_MODEL_NAME}) — no quota limits.")
-            self._cached_embeddings = HuggingFaceEmbeddings(
+
+        print(f"Using LOCAL embeddings ({config.LOCAL_EMBEDDING_MODEL_NAME}) — no quota limits.")
+        self._cached_embeddings = HuggingFaceEmbeddings(
                 model_name=config.LOCAL_EMBEDDING_MODEL_NAME
             )
-        else:
-            print(f"Using GOOGLE embeddings ({config.EMBEDDING_MODEL_NAME}) — quota applies.")
-            self._cached_embeddings = GoogleGenerativeAIEmbeddings(
-                model=config.EMBEDDING_MODEL_NAME
-            )
+
 
         return self._cached_embeddings
 

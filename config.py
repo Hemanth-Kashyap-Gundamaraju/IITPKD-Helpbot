@@ -11,8 +11,14 @@ Dependencies: none.
 Utilities: imported by every other module in the project (scraper.py,
     vector_store.py, chain_builder.py, cron_ingest.py, cli.py, wsgi.py, etc).
 """
+
+from pathlib import Path
+from dotenv import load_dotenv
+
 import os
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 
 # ---------------------------------------------------------------------------
 # User agents (used both for the general HTTP client and the scraper)
@@ -20,6 +26,7 @@ import os
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chatbot/1.0"
 USER_AGENT = os.getenv("USER_AGENT", DEFAULT_USER_AGENT)
 os.environ.setdefault("USER_AGENT", USER_AGENT)
+APP_ENV = os.getenv("APP_ENV", "local").strip().lower()
 
 DEFAULT_SCRAPER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -37,7 +44,7 @@ TARGET_URLS = [
 
 SCRAPER_BASE_URL = os.getenv("SCRAPER_BASE_URL", TARGET_URLS[0])
 SCRAPER_DISCOVERY_MAX_PAGES = int(os.getenv("SCRAPER_DISCOVERY_MAX_PAGES", "25"))
-SCRAPER_TARGET_MAX_PAGES = int(os.getenv("SCRAPER_TARGET_MAX_PAGES", "50"))
+SCRAPER_TARGET_MAX_PAGES = int(os.getenv("SCRAPER_TARGET_MAX_PAGES", "100"))
 SCRAPER_REQUEST_TIMEOUT = int(os.getenv("SCRAPER_REQUEST_TIMEOUT", "10"))
 SCRAPER_SKIP_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png", ".zip", ".docx")
 SCRAPER_HEADERS = {
@@ -57,10 +64,11 @@ PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "iit-pkd-index")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 RETRIEVER_TOP_K = int(os.getenv("RETRIEVER_TOP_K", "3"))
 
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-001")
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "google").strip().lower()
+if not PINECONE_API_KEY:
+    raise RuntimeError("PINECONE_API_KEY must be set")
+
 LOCAL_EMBEDDING_MODEL_NAME = os.getenv(
-    "LOCAL_EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+    "LOCAL_EMBEDDING_MODEL_NAME", "intfloat/e5-large-v2"
 )
 
 VECTOR_DB_RETRY_ATTEMPTS = int(os.getenv("VECTOR_DB_RETRY_ATTEMPTS", "4"))
@@ -75,9 +83,6 @@ VECTOR_DB_RETRY_SLEEP_JITTER_MAX = float(
 INGESTION_BATCH_SIZE = int(os.getenv("INGESTION_BATCH_SIZE", "10"))
 INGESTION_RATE_LIMIT_COOLDOWN = int(os.getenv("INGESTION_RATE_LIMIT_COOLDOWN", "60"))
 INGESTION_BATCH_PAUSE = int(os.getenv("INGESTION_BATCH_PAUSE", "8"))
-
-if  not PINECONE_API_KEY:
-    raise RuntimeError("PINECONE_API_KEY must be set when APP_ENV=production")
 
 # ---------------------------------------------------------------------------
 # LLM settings

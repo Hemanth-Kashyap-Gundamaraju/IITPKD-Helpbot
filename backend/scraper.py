@@ -1,4 +1,6 @@
 from langchain_community.document_loaders import WebBaseLoader
+from dotenv import load_dotenv
+load_dotenv()
 import config
 from backend.link_discovery import LinkDiscoverer
 from backend.text_cleaning import clean_scraped_documents
@@ -16,12 +18,12 @@ def scrape_target_pages():
         langchain_community.document_loaders.WebBaseLoader,
         backend.text_cleaning.clean_scraped_documents().
     Utilities: called by backend.vector_store.initialize_vector_db() (via
-        main.py) and cron_ingest.run_ingestion().
+        main.py).
     """
     discoverer = LinkDiscoverer(max_pages=config.SCRAPER_TARGET_MAX_PAGES)
     dynamic_urls = discoverer.crawl()
 
     loader = WebBaseLoader(web_paths=dynamic_urls)
     raw_documents = loader.load()
-
+    print(f"Scraped {len(raw_documents)} documents from {len(dynamic_urls)} unique internal links.")
     return clean_scraped_documents(raw_documents)

@@ -24,6 +24,7 @@ class LinkDiscoverer:
         self.base_domain = urlparse(self.base_url).netloc
         self.discovered_urls = {self.base_url}
         self.urls_to_crawl = [self.base_url]
+        self.visited_urls = set()  # Track visited URLs to avoid re-crawling
 
     def _is_worth_crawling(self, full_url):
         """
@@ -72,6 +73,7 @@ class LinkDiscoverer:
             if self._is_worth_crawling(full_url):
                 self.discovered_urls.add(full_url)
                 self.urls_to_crawl.append(full_url)
+                self.visited_urls.add(full_url)  # Mark the URL as visited
 
     def crawl(self):
         """
