@@ -1,7 +1,6 @@
 flask
 gunicorn
 requests
-pinecone
 langchain-pinecone
 google-generativeai
 langchain
