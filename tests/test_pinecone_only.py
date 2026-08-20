@@ -1,5 +1,4 @@
 import importlib
-import os
 
 
 def test_build_retriever_uses_pinecone_without_local_cache(monkeypatch):

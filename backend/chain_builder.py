@@ -3,7 +3,6 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
 from langchain_pinecone import PineconeVectorStore
 from backend.utils.embeddings_utils import get_embeddings
-from backend.utils.pinecone_index_utils import get_or_create_index
 import config
 
 RAG_PROMPT_TEMPLATE = """
@@ -36,8 +35,9 @@ def format_docs(docs):
 
 def _build_retriever_from_existing_store():
     """
-    Description: Connects to the Pinecone vector store and wraps it as a
-        retriever for the RAG chain.
+    Description: Connects to the configured Pinecone index and wraps it as a
+        retriever for the RAG chain, without falling back to a local cache or
+        creating a new index on startup.
     Inputs: none. Reads global config.PINECONE_INDEX_NAME and
         config.RETRIEVER_TOP_K.
     Outputs: returns a retriever object. No globals changed.
@@ -46,9 +46,8 @@ def _build_retriever_from_existing_store():
     Utilities: called by build_rag_chain().
     """
     embeddings = get_embeddings()
-    index_name = get_or_create_index(embeddings)
     vector_db = PineconeVectorStore(
-        index_name=index_name,
+        index_name=config.PINECONE_INDEX_NAME,
         embedding=embeddings,
     )
     return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})

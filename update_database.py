@@ -3,9 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-import config  # forces USER_AGENT to be set immediately
-from backend import scraper
-from backend import vector_store
+from backend.DatabaseBuilder.Webscraping import scraper
+from backend.DatabaseBuilder import vector_store
 
 
 def update_database():

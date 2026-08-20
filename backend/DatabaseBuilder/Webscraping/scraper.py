@@ -2,8 +2,8 @@ from langchain_community.document_loaders import WebBaseLoader
 from dotenv import load_dotenv
 load_dotenv()
 import config
-from backend.link_discovery import LinkDiscoverer
-from backend.text_cleaning import clean_scraped_documents
+from backend.utils.link_discovery import LinkDiscoverer
+from backend.DatabaseBuilder.text_cleaning import clean_scraped_documents
 
 
 def scrape_target_pages():
