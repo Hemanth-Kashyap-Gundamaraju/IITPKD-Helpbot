@@ -37,7 +37,8 @@ class LinkDiscoverer:
         Dependencies: none.
         Utilities: called by _extract_links_from_page().
         """
-        if urlparse(full_url).netloc != self.base_domain:
+        netloc = urlparse(full_url).netloc.lower()
+        if netloc != self.base_domain and not netloc.endswith("." + self.base_domain):
             return False
         if full_url.lower().endswith(config.SCRAPER_SKIP_EXTENSIONS):
             return False

@@ -82,6 +82,8 @@ def _remove_navigation_clusters(text):
 
     def _flush_cluster():
         if len(current_cluster) >= MIN_NAV_CLUSTER_SIZE:
+            kept_lines.append(current_cluster[0])
+            kept_lines.append(current_cluster[-1])
             return
         kept_lines.extend(current_cluster)
 
