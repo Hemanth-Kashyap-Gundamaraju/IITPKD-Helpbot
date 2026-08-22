@@ -1,11 +1,9 @@
-from fastapi import FastAPI
 from pathlib import Path
 from dotenv import load_dotenv
 import backend.chain_builder as chain_builder
 import interface.cli as cli
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
-app = FastAPI()
 # ---------------------------------------------------------------------------
 # GLOBAL SETTINGS
 # ---------------------------------------------------------------------------
@@ -28,7 +26,7 @@ def _build_chain():
     return chain_builder.build_rag_chain(retriever=None)
 
 
-def main():
+def main(flag=False):
     """
     Description: Main orchestration entry point that builds the RAG chain
         from the configured vector store and hands off to the CLI chat loop.
@@ -40,7 +38,6 @@ def main():
     """
 
     rag_chain = _build_chain()
-
     cli.run_chat_loop(rag_chain)
 
 

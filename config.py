@@ -9,7 +9,7 @@ Inputs: none (this file has no functions - it runs once on import).
 Outputs: none.
 Dependencies: none.
 Utilities: imported by every other module in the project (scraper.py,
-    vector_store.py, chain_builder.py, cron_ingest.py, cli.py, wsgi.py, etc).
+    vector_store.py, chain_builder.py, cron_ingest.py, cli.py, asgi.py, etc).
 """
 
 from pathlib import Path
