@@ -14,7 +14,7 @@ def test_build_retriever_uses_pinecone_without_local_cache(monkeypatch):
     chain_builder = importlib.reload(chain_builder)
 
     class DummyStore:
-        def as_retriever(self, search_kwargs):
+        def as_retriever(self, search_kwargs, **kwargs):
             return {"search_kwargs": search_kwargs, "used": True}
 
     captured = {}
