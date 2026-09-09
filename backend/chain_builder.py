@@ -6,17 +6,32 @@ from backend.utils.embeddings_utils import get_embeddings
 import config
 from backend.utils.pinecone_index_utils import get_or_create_index
 
+# ---------------------------------------------------------------------------
+# GLOBAL SETTINGS
+# ---------------------------------------------------------------------------
+# The exact sentence the LLM must say when the context doesn't answer the
+# question. Kept as a global constant (not hardcoded inline in the prompt)
+# so if we ever want to change this wording, there's only ONE place to edit.
+NO_ANSWER_FALLBACK_MESSAGE = "I don't have verified information about that from the IIT Palakkad website."
+
 RAG_PROMPT_TEMPLATE = """
-Use the following pieces of retrieved context to answer the question. 
-If you don't know the answer, just say that you don't know. 
-Keep responses clear and formatted appropriately for a mobile chat screen.
+You are answering questions ONLY about IIT Palakkad, using ONLY the context
+given below. Follow these rules strictly:
 
-Context: {context}
+1. Do NOT use anything you know from your own training. Only use the
+   "Context" text below.
+2. Do NOT guess, assume, or fill gaps using general knowledge about IITs,
+   other institutes, or anything not explicitly in the Context.
+3. If the Context does not clearly contain the answer, reply with exactly
+   this sentence and nothing else: "{fallback_message}"
+4. Keep responses clear and formatted appropriately for a mobile chat screen.
 
-Question: {question}
+Context: {{context}}
+
+Question: {{question}}
 
 Answer:
-"""
+""".format(fallback_message=NO_ANSWER_FALLBACK_MESSAGE)
 
 
 def format_docs(docs):

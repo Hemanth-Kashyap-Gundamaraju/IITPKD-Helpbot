@@ -67,9 +67,8 @@ RETRIEVER_TOP_K = int(os.getenv("RETRIEVER_TOP_K", "3"))
 if not PINECONE_API_KEY:
     raise RuntimeError("PINECONE_API_KEY must be set")
 
-LOCAL_EMBEDDING_MODEL_NAME = os.getenv(
-    "LOCAL_EMBEDDING_MODEL_NAME", "intfloat/e5-large-v2"
-)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-001")
 
 VECTOR_DB_RETRY_ATTEMPTS = int(os.getenv("VECTOR_DB_RETRY_ATTEMPTS", "4"))
 VECTOR_DB_RETRY_SLEEP_BASE = float(os.getenv("VECTOR_DB_RETRY_SLEEP_BASE", "4"))

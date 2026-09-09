@@ -1,12 +1,13 @@
-flask
-gunicorn
+fastapi
+uvicorn
 requests
 langchain-pinecone
-google-generativeai
+pinecone-client
 langchain
 langchain-community
+langchain-text-splitters
 langchain-groq
-sentence-transformers
+langchain-google-genai
 python-dotenv
 pytest
 bs4
