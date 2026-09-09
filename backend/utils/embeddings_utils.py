@@ -1,3 +1,4 @@
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import config
 

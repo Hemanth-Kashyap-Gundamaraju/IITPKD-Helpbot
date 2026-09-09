@@ -23,7 +23,13 @@ def scrape_target_pages():
     discoverer = LinkDiscoverer(max_pages=config.SCRAPER_TARGET_MAX_PAGES)
     dynamic_urls = discoverer.crawl()
 
-    loader = WebBaseLoader(web_paths=dynamic_urls)
-    raw_documents = loader.load()
+    raw_documents = []
+    for url in dynamic_urls:
+        try:
+            loader = WebBaseLoader(web_paths=[url])
+            raw_documents.extend(loader.load())
+        except Exception as e:
+            print(f"Warning: Failed to load {url} - {e}")
+            
     print(f"Scraped {len(raw_documents)} documents from {len(dynamic_urls)} unique internal links.")
     return clean_scraped_documents(raw_documents)

@@ -62,13 +62,13 @@ CHUNK_OVERLAP = 150
 # ---------------------------------------------------------------------------
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "iit-pkd-index")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-RETRIEVER_TOP_K = int(os.getenv("RETRIEVER_TOP_K", "3"))
+RETRIEVER_TOP_K = int(os.getenv("RETRIEVER_TOP_K", "7"))
 
 if not PINECONE_API_KEY:
     raise RuntimeError("PINECONE_API_KEY must be set")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-001")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "models/gemini-embedding-2")
 
 VECTOR_DB_RETRY_ATTEMPTS = int(os.getenv("VECTOR_DB_RETRY_ATTEMPTS", "4"))
 VECTOR_DB_RETRY_SLEEP_BASE = float(os.getenv("VECTOR_DB_RETRY_SLEEP_BASE", "4"))

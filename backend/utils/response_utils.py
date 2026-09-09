@@ -28,16 +28,20 @@ def _extract_answer_text(response):
 def _strip_thinking_tags(text):
     """
     Description: Removes any <think>...</think> block from the model's
-        answer. Some models (like qwen3.6) show their internal reasoning
-        in these tags before giving the real answer - we don't want to
-        show that to users. Marked private since only clean_llm_response()
-        in this file calls it.
-    Inputs: text (string). Reads global THINK_TAG_PATTERN.
-    Outputs: returns a string. No globals changed.
-    Dependencies: none.
-    Utilities: called by clean_llm_response().
+        answer. Handles well-formed blocks and blocks that were cut off
+        due to max_tokens.
     """
-    return THINK_TAG_PATTERN.sub("", text).strip()
+    # 1. Remove well-formed <think>...</think>
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # 2. If the model was cut off and never closed the tag, strip everything from <think> onwards
+    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
+    
+    # If the text is completely empty after stripping, return a fallback message
+    text = text.strip()
+    if not text:
+        return "I apologize, but my response was cut off before I could finish my thought. Please try asking your question again!"
+        
+    return text
 
 
 def clean_llm_response(response):

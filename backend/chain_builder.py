@@ -1,10 +1,15 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
+from operator import itemgetter
 from langchain_groq import ChatGroq
 from langchain_pinecone import PineconeVectorStore
 from backend.utils.embeddings_utils import get_embeddings
 import config
 from backend.utils.pinecone_index_utils import get_or_create_index
+from datetime import datetime
+
+def get_current_time():
+    return datetime.now().strftime("%A, %Y-%m-%d %I:%M %p")
 
 # ---------------------------------------------------------------------------
 # GLOBAL SETTINGS
@@ -14,24 +19,28 @@ from backend.utils.pinecone_index_utils import get_or_create_index
 # so if we ever want to change this wording, there's only ONE place to edit.
 NO_ANSWER_FALLBACK_MESSAGE = "I don't have verified information about that from the IIT Palakkad website."
 
-RAG_PROMPT_TEMPLATE = """
-You are answering questions ONLY about IIT Palakkad, using ONLY the context
-given below. Follow these rules strictly:
+RAG_PROMPT_TEMPLATE = f"""
+You are the official AI Helpbot for IIT Palakkad (Indian Institute of Technology Palakkad).
+Use the following pieces of retrieved context to answer the user's question. 
+Follow these rules strictly:
+1. For factual queries (e.g. bus timings, faculty names, fees, deadlines), NEVER use outside information. If the answer is not in the context, explicitly say: "{NO_ANSWER_FALLBACK_MESSAGE}"
+2. For subjective queries or general student advice (e.g. comparing CS vs DS, career guidance, study tips), you MAY use your general knowledge to provide a helpful, conversational answer.
+3. Keep responses clear, concise, and formatted appropriately for a mobile WhatsApp screen.
+4. If you used the retrieved context to answer a factual question, ALWAYS cite the source URLs at the end in a 'Sources:' section. If you gave general advice or didn't know the answer, DO NOT include a 'Sources:' section.
+5. If the user asks a question that is clearly unrelated to academics, campus life, or engineering (e.g. "how do I cook pasta"), refuse to answer and state that you are an IIT Palakkad Helpbot.
 
-1. Do NOT use anything you know from your own training. Only use the
-   "Context" text below.
-2. Do NOT guess, assume, or fill gaps using general knowledge about IITs,
-   other institutes, or anything not explicitly in the Context.
-3. If the Context does not clearly contain the answer, reply with exactly
-   this sentence and nothing else: "{fallback_message}"
-4. Keep responses clear and formatted appropriately for a mobile chat screen.
+The current date and time is: {{current_time}}. You can use this to answer time-relative questions like "next bus" based on the provided schedules.
 
-Context: {{context}}
+Recent Chat History:
+{{chat_history}}
+
+Context:
+{{context}}
 
 Question: {{question}}
 
 Answer:
-""".format(fallback_message=NO_ANSWER_FALLBACK_MESSAGE)
+"""
 
 
 def format_docs(docs):
@@ -46,7 +55,24 @@ def format_docs(docs):
     Dependencies: none.
     Utilities: called by build_rag_chain().
     """
-    return "\n\n".join(doc.page_content for doc in docs)
+    docs_text = []
+    clean_count = 0
+    for doc in docs:
+        content = doc.page_content
+        source = doc.metadata.get("source", "Unknown Source")
+        
+        # Hard-filter the recurring junk navigation chunks (skip filter for PDFs)
+        if not source.lower().endswith(".pdf"):
+            if content.count('\n') > 15 or "Englishहिन्दी" in content:
+                continue
+        docs_text.append(f"Content:\n{content}\nSource: {source}")
+        
+        # Only take the top 7 clean chunks
+        clean_count += 1
+        if clean_count >= 7:
+            break
+            
+    return "\n\n---\n\n".join(docs_text)
 
 
 def _build_retriever_from_existing_store():
@@ -66,7 +92,10 @@ def _build_retriever_from_existing_store():
         index_name=index_name,
         embedding=embeddings,
     )
-    return vector_db.as_retriever(search_kwargs={"k": config.RETRIEVER_TOP_K})
+    return vector_db.as_retriever(
+        search_type="similarity", 
+        search_kwargs={"k": 250}
+    )
 
 def build_rag_chain(retriever=None):
     """
@@ -83,11 +112,19 @@ def build_rag_chain(retriever=None):
     if retriever is None:
         retriever = _build_retriever_from_existing_store()
 
-    prompt = PromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
-    llm = ChatGroq(model=config.LLM_MODEL_NAME, temperature=config.LLM_TEMPERATURE)
+    prompt = PromptTemplate(
+        template=RAG_PROMPT_TEMPLATE,
+        input_variables=["context", "question", "chat_history"],
+        partial_variables={"current_time": get_current_time}
+    )
+    llm = ChatGroq(model=config.LLM_MODEL_NAME, temperature=config.LLM_TEMPERATURE, max_tokens=4000)
 
     return (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+        {
+            "context": itemgetter("question") | retriever | format_docs, 
+            "question": itemgetter("question"),
+            "chat_history": itemgetter("chat_history")
+        }
         | prompt
         | llm
     )

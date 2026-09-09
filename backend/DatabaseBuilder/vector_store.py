@@ -1,53 +1,9 @@
-from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 import config
+import time
 from backend.utils.embeddings_utils import get_embeddings
 from backend.utils.chunking_utils import chunk_documents
 from backend.utils.pinecone_index_utils import get_or_create_index
-
-def _get_or_create_index(embeddings):
-    """Create or select a Pinecone index compatible with the active embedding model."""
-    client = Pinecone(api_key=config.PINECONE_API_KEY)
-    sample_vector = embeddings.embed_query("warmup")
-    dimension = len(sample_vector)
-    target_name = config.PINECONE_INDEX_NAME
-    dimension_suffix = f"-{dimension}"
-    preferred_name = f"{target_name}{dimension_suffix}"
-
-    existing_indexes = {item["name"] for item in client.list_indexes()}
-
-    if preferred_name in existing_indexes:
-        index_info = client.describe_index(preferred_name)
-        if index_info.get("dimension") == dimension:
-            return preferred_name
-
-    if target_name in existing_indexes:
-        index_info = client.describe_index(target_name)
-        if index_info.get("dimension") == dimension:
-            return target_name
-
-    if preferred_name in existing_indexes:
-        return preferred_name
-
-    client.create_index(
-        name=preferred_name,
-        dimension=dimension,
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-    )
-
-    import time
-
-    for _ in range(30):
-        try:
-            index_info = client.describe_index(preferred_name)
-            if index_info.get("status", {}).get("state") == "Ready":
-                break
-        except Exception:
-            pass
-        time.sleep(2)
-
-    return preferred_name
 
 
 def _build_vector_db(chunks, embeddings):
@@ -62,11 +18,18 @@ def _build_vector_db(chunks, embeddings):
     Utilities: called by initialize_vector_db().
     """
     index_name = get_or_create_index(embeddings)
-    return PineconeVectorStore.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        index_name=index_name,
-    )
+    vector_store = PineconeVectorStore(index_name=index_name, embedding=embeddings)
+    
+    batch_size = 50
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i+batch_size]
+        print(f"Uploading batch {i//batch_size + 1}/{(len(chunks) + batch_size - 1)//batch_size}...")
+        vector_store.add_documents(batch)
+        if i + batch_size < len(chunks):
+            print("Pausing for 65s to respect Google GenAI 100-req/min free tier rate limits...")
+            time.sleep(65)
+            
+    return vector_store
 
 
 def initialize_vector_db(documents):

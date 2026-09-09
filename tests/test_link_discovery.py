@@ -3,8 +3,6 @@ Description: Unit tests for backend.utils.link_discovery.
     Each test checks one specific behavior/edge case in isolation, so if
     this function ever breaks, we know exactly which case failed.
 """
-from sympy import true
-
 from backend.utils import link_discovery
 
 link_discoverer=link_discovery.LinkDiscoverer("http://iitpkd.ac.in",25)

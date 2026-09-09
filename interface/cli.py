@@ -2,6 +2,9 @@ import sys
 import time
 import threading
 from backend.utils.response_utils import clean_llm_response
+from backend.utils.cache_utils import get_response_cache
+from backend.utils.analytics import get_query_logger
+from backend.utils.escalation import get_escalation_handler
 
 
 class LoadingIndicator:
@@ -75,14 +78,46 @@ def execute_query_with_loading(rag_chain, user_question):
     Utilities: called by run_chat_loop().
     """
     indicator = LoadingIndicator()
+    response_cache = get_response_cache()
+    query_logger = get_query_logger()
+    escalation_handler = get_escalation_handler()
+
+    start_time = time.time()
+    source_urls = []
+    cache_hit = False
 
     try:
-        indicator.start()
-        response = rag_chain.invoke(user_question)
-        indicator.stop()
+        escalation_response = escalation_handler.check_escalation(user_question)
+        
+        if escalation_response:
+            print(f"Answer (Escalated): {escalation_response}")
+            clean_answer = escalation_response
+        else:
+            cached_answer = response_cache.get(user_question)
+            if cached_answer is not None:
+                print(f"Answer (Cache Hit): {cached_answer}")
+                clean_answer = cached_answer
+                cache_hit = True
+            else:
+                indicator.start()
+                response = rag_chain.invoke(user_question)
+                indicator.stop()
 
-        clean_answer = clean_llm_response(response)
-        print(f"Answer: {clean_answer}")
+                clean_answer = clean_llm_response(response)
+                response_cache.put(user_question, clean_answer)
+                print(f"Answer: {clean_answer}")
+
+        response_time_ms = (time.time() - start_time) * 1000
+
+        # Log the interaction
+        query_logger.log_query(
+            question=user_question,
+            answer=clean_answer,
+            source_urls=source_urls,
+            response_time_ms=response_time_ms,
+            cache_hit=cache_hit,
+            platform="cli"
+        )
 
     except Exception as e:
         indicator.stop()

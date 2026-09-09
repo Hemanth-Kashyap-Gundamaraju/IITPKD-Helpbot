@@ -27,6 +27,11 @@ def test_build_retriever_uses_pinecone_without_local_cache(monkeypatch):
     monkeypatch.setattr(chain_builder, "get_embeddings", lambda: object())
     monkeypatch.setattr(
         chain_builder,
+        "get_or_create_index",
+        lambda emb: config.PINECONE_INDEX_NAME,
+    )
+    monkeypatch.setattr(
+        chain_builder,
         "PineconeVectorStore",
         fake_pinecone_vector_store,
     )

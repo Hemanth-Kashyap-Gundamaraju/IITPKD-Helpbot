@@ -26,7 +26,7 @@ def _build_chain():
     return chain_builder.build_rag_chain(retriever=None)
 
 
-def main(flag=False):
+def main():
     """
     Description: Main orchestration entry point that builds the RAG chain
         from the configured vector store and hands off to the CLI chat loop.
