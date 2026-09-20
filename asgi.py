@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request, Query, Body, Header
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from backend import chain_builder
+from backend.utils import response_utils
 from backend.utils.response_utils import clean_llm_response
 import config
 from backend.utils.cache_utils import get_response_cache
@@ -144,8 +145,8 @@ async def call_chat_loop(payload: ChatRequest):
                     "chat_history": ""
                 })
                 clean_answer = clean_llm_response(response)
-                response_cache.put(payload.message, clean_answer)
-
+                if clean_answer != response_utils.CUTOFF_FALLBACK_MESSAGE:
+                    response_cache.put(payload.message, clean_answer)
         response_time_ms = (time.time() - start_time) * 1000
         
         # Log the interaction

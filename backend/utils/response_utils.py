@@ -6,6 +6,7 @@ import re
 # Compiled once so we don't rebuild this regex every time we clean a response.
 # Matches everything between <think> and </think>, including newlines (DOTALL).
 THINK_TAG_PATTERN = re.compile(r"<think>.*?</think>", flags=re.DOTALL)
+CUTOFF_FALLBACK_MESSAGE = "I apologize, but my response was cut off before I could finish my thought. Please try asking your question again!"
 
 
 def _extract_answer_text(response):

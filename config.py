@@ -89,6 +89,12 @@ INGESTION_BATCH_PAUSE = int(os.getenv("INGESTION_BATCH_PAUSE", "8"))
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "qwen/qwen3.6-27b")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 
+# Caps how many tokens the model can generate per answer (thinking + real
+# answer combined). Groq's free tier only allows 1000 output tokens per
+# MINUTE total, so keeping each single answer well under that stops us
+# from tripping the 429 rate-limit error.
+LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "800"))
+
 # ---------------------------------------------------------------------------
 # WhatsApp settings
 # ---------------------------------------------------------------------------

@@ -96,6 +96,22 @@ def _build_retriever_from_existing_store():
         search_type="similarity", 
         search_kwargs={"k": 250}
     )
+def _build_llm():
+    """
+    Description: Creates the Groq chat model with the output-length cap
+        applied. Pulled into its own function so build_rag_chain() doesn't
+        have to know *how* the LLM is configured, just that it needs one.
+    Inputs: none. Reads global config.LLM_MODEL_NAME, config.LLM_TEMPERATURE,
+        config.LLM_MAX_OUTPUT_TOKENS.
+    Outputs: returns a ChatGroq instance. No globals changed.
+    Dependencies: uses langchain_groq.ChatGroq.
+    Utilities: called by build_rag_chain().
+    """
+    return ChatGroq(
+        model=config.LLM_MODEL_NAME,
+        temperature=config.LLM_TEMPERATURE,
+        max_tokens=config.LLM_MAX_OUTPUT_TOKENS,
+    )
 
 def build_rag_chain(retriever=None):
     """
@@ -117,7 +133,7 @@ def build_rag_chain(retriever=None):
         input_variables=["context", "question", "chat_history"],
         partial_variables={"current_time": get_current_time}
     )
-    llm = ChatGroq(model=config.LLM_MODEL_NAME, temperature=config.LLM_TEMPERATURE, max_tokens=4000)
+    llm = _build_llm()
 
     return (
         {
