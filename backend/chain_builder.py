@@ -1,7 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from operator import itemgetter
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_pinecone import PineconeVectorStore
 from backend.utils.embeddings_utils import get_embeddings
 import config
@@ -104,10 +104,10 @@ def _build_llm():
     Inputs: none. Reads global config.LLM_MODEL_NAME, config.LLM_TEMPERATURE,
         config.LLM_MAX_OUTPUT_TOKENS.
     Outputs: returns a ChatGroq instance. No globals changed.
-    Dependencies: uses langchain_groq.ChatGroq.
+    Dependencies: uses langchain_google_genai.ChatGoogleGenerativeAI.
     Utilities: called by build_rag_chain().
     """
-    return ChatGroq(
+    return ChatGoogleGenerativeAI(
         model=config.LLM_MODEL_NAME,
         temperature=config.LLM_TEMPERATURE,
         max_tokens=config.LLM_MAX_OUTPUT_TOKENS,
@@ -122,7 +122,7 @@ def build_rag_chain(retriever=None):
         vector store). Reads global config.LLM_MODEL_NAME, config.LLM_TEMPERATURE.
     Outputs: returns a LangChain runnable chain. No globals changed.
     Dependencies: calls _build_retriever_from_existing_store() (only if no
-        retriever was passed in), format_docs(); uses langchain_groq.ChatGroq.
+        retriever was passed in), format_docs(); uses langchain_google_genai.ChatGoogleGenerativeAI.
     Utilities: called by main.py and asgi.py.
     """
     if retriever is None:

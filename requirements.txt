@@ -9,7 +9,7 @@ google-generativeai
 langchain
 langchain-community
 langchain-text-splitters
-langchain-groq
+langchain-google-genai
 python-dotenv
 pytest
 bs4

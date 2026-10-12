@@ -86,7 +86,7 @@ INGESTION_BATCH_PAUSE = int(os.getenv("INGESTION_BATCH_PAUSE", "8"))
 # ---------------------------------------------------------------------------
 # LLM settings
 # ---------------------------------------------------------------------------
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "qwen/qwen3.6-27b")
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-3.1-flash-lite")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 
 # Caps how many tokens the model can generate per answer (thinking + real
